@@ -1,0 +1,77 @@
+---
+- name: Install Clickhouse & Vector
+  hosts: clickhouse
+  remote_user: centos
+  tasks:
+    - name: Install, configure, and start Clickhouse
+      tags: clickhouse
+
+      block:
+        - name: Get clickhouse distrib
+          block:
+            - name: Get clickhouse distrib
+              ansible.builtin.get_url:
+                url: https://packages.clickhouse.com/rpm/stable/{{ item }}-{{ clickhouse_version }}.x86_64.rpm
+                dest: ./{{ item }}-{{ clickhouse_version }}.rpm
+                mode: "0644"
+              with_items: "{{ clickhouse_packages }}"
+          rescue:
+            - name: Get clickhouse distrib
+              ansible.builtin.get_url:
+                url: https://packages.clickhouse.com/rpm/stable/clickhouse-common-static-{{ clickhouse_version }}.x86_64.rpm
+                dest: ./clickhouse-common-static-{{ clickhouse_version }}.rpm
+                mode: "0644"
+              with_items: "{{ clickhouse_packages }}"
+
+        - name: Install clickhouse packages
+          become: true
+          ansible.builtin.yum:
+            name:
+              - clickhouse-common-static-{{ clickhouse_version }}.rpm
+              - clickhouse-client-{{ clickhouse_version }}.rpm
+              - clickhouse-server-{{ clickhouse_version }}.rpm
+          notify: Start clickhouse service
+
+        - name: Flush handlers
+          ansible.builtin.meta: flush_handlers
+
+        - name: Wait for clickhouse-server to become available
+          ansible.builtin.pause:
+            seconds: 20
+            echo: false
+
+        - name: Create database
+          ansible.builtin.command: clickhouse-client -q 'create database logs;'
+          register: create_db
+          failed_when: create_db.rc != 0 and create_db.rc != 82
+          changed_when: create_db.rc == 0
+
+# Vector
+- name: Install Vector
+  tags: vector
+  hosts: vector-01
+  tasks:
+    - name: Get RPM packages
+      ansible.builtin.get_url:
+        url: "https://packages.timber.io/vector/{{ vector_version }}/{{ item }}-{{ vector_version }}-1.x86_64.rpm"
+        dest: "./{{ item }}.rpm"
+      with_items: "{{ vector_packages }}"
+    - name: Install RPM packages
+      become: true
+      ansible.builtin.yum:
+        name: "{{ item }}.rpm"
+        disable_gpg_check: true
+      with_items: "{{ vector_packages }}"
+    - name: Copy server configuration file
+      become: true
+      ansible.builtin.template:
+        src: vector.toml
+        dest: "/etc/vector/vector.toml"
+        owner: "0"
+        group: "0"
+        mode: "0664"
+    - name: Start vector service
+      become: true
+      ansible.builtin.service:
+        name: vector
+        state: restarted

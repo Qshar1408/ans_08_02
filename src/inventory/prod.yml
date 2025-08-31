@@ -1,0 +1,16 @@
+---
+clickhouse:
+  hosts:
+    clickhouse-01:
+      ansible_connection: ssh
+      ansible_ssh_user: qshar
+      ansible_host: 84.201.133.68
+      ansible_private_key_file: ~/.ssh/digma2
+
+vector:
+  hosts:
+    vector-01:
+      ansible_connection: docker
+      ansible_ssh_user: qshar
+      ansible_host: 184.201.133.68
+      ansible_private_key_file: ~/.ssh/digma2
